@@ -1,0 +1,44 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: taskflow-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Your_strong_password123}
+    ports:
+      - "1433:1433"
+    volumes:
+      - taskflow-sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${MSSQL_SA_PASSWORD:-Your_strong_password123}" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskflow-api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__ConnectionString: "Server=sqlserver,1433;Database=TaskFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Your_strong_password123};TrustServerCertificate=True;MultipleActiveResultSets=true"
+      Database__ApplyMigrationsOnStartup: "true"
+      Jwt__Issuer: TaskFlow
+      Jwt__Audience: TaskFlowClients
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-TaskFlow_Development_Secret_Key_Change_In_Production_1234567890}
+      Jwt__AccessTokenExpirationMinutes: 60
+    ports:
+      - "8080:8080"
+    volumes:
+      - taskflow-api-logs:/app/logs
+      - taskflow-api-uploads:/app/wwwroot/uploads
+
+volumes:
+  taskflow-sqlserver-data:
+  taskflow-api-logs:
+  taskflow-api-uploads:

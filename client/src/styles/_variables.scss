@@ -1,0 +1,31 @@
+$spacing-scale: (
+  0: 0,
+  1: 0.25rem,
+  2: 0.5rem,
+  3: 0.75rem,
+  4: 1rem,
+  5: 1.5rem,
+  6: 2rem,
+  7: 3rem,
+  8: 4rem,
+);
+
+$breakpoints: (
+  sm: 600px,
+  md: 960px,
+  lg: 1280px,
+  xl: 1920px,
+);
+
+$z-index: (
+  drawer: 200,
+  header: 300,
+  overlay: 400,
+  dialog: 500,
+);
+
+$border-radius-sm: 0.375rem;
+$border-radius-md: 0.75rem;
+$border-radius-lg: 1rem;
+
+$content-max-width: 80rem;

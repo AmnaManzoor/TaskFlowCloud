@@ -1,0 +1,32 @@
+@use 'sass:map';
+@use 'variables' as *;
+
+@function spacing($key) {
+  @return map.get($spacing-scale, $key);
+}
+
+.u-stack-4 > * + * {
+  margin-top: spacing(4);
+}
+
+.u-inline-2 {
+  display: inline-flex;
+  align-items: center;
+  gap: spacing(2);
+}
+
+.u-full-width {
+  width: 100%;
+}
+
+.u-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

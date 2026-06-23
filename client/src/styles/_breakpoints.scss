@@ -1,0 +1,17 @@
+@use 'sass:map';
+@use 'variables' as *;
+
+@mixin respond-to($breakpoint) {
+  $value: map.get($breakpoints, $breakpoint);
+
+  @if $value {
+    @media (min-width: $value) {
+      @content;
+    }
+  }
+}
+
+.container {
+  width: min(100% - 2rem, $content-max-width);
+  margin-inline: auto;
+}
