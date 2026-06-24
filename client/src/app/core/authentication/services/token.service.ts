@@ -12,15 +12,15 @@ export class TokenService {
   private onRefreshCallback: (() => void) | null = null;
 
   getAccessToken(): string | null {
-    return readStorageItem(this.config.tokenStorageKey);
+    return this.readStoredValue(this.config.tokenStorageKey);
   }
 
   getRefreshToken(): string | null {
-    return readStorageItem(this.config.refreshTokenStorageKey);
+    return this.readStoredValue(this.config.refreshTokenStorageKey);
   }
 
   getAccessTokenExpiresAt(): Date | null {
-    const raw = readStorageItem(this.config.accessTokenExpiresAtStorageKey);
+    const raw = this.readStoredValue(this.config.accessTokenExpiresAtStorageKey);
     if (!raw) {
       return null;
     }
@@ -30,7 +30,7 @@ export class TokenService {
   }
 
   isRememberMeEnabled(): boolean {
-    return readStorageItem(this.config.rememberMeStorageKey) === 'true';
+    return this.readStoredValue(this.config.rememberMeStorageKey) === 'true';
   }
 
   hasStoredSession(): boolean {
@@ -76,6 +76,7 @@ export class TokenService {
       sessionStorage.removeItem(this.config.tokenStorageKey);
       sessionStorage.removeItem(this.config.refreshTokenStorageKey);
       sessionStorage.removeItem(this.config.accessTokenExpiresAtStorageKey);
+      sessionStorage.removeItem(this.config.rememberMeStorageKey);
     }
   }
 
@@ -130,5 +131,17 @@ export class TokenService {
     opposite.removeItem(this.config.tokenStorageKey);
     opposite.removeItem(this.config.refreshTokenStorageKey);
     opposite.removeItem(this.config.accessTokenExpiresAtStorageKey);
+    opposite.removeItem(this.config.rememberMeStorageKey);
+  }
+
+  private readStoredValue(key: string): string | null {
+    if (typeof sessionStorage !== 'undefined') {
+      const sessionValue = sessionStorage.getItem(key);
+      if (sessionValue) {
+        return sessionValue;
+      }
+    }
+
+    return readStorageItem(key);
   }
 }

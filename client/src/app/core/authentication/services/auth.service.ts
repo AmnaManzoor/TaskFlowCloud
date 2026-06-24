@@ -39,6 +39,7 @@ export class AuthService {
   private readonly notifications = inject(NotificationService);
 
   private refreshInFlight$: Observable<AuthResponse> | null = null;
+  private sessionGeneration = 0;
 
   constructor() {
     this.tokenService.registerRefreshCallback(() => {
@@ -47,13 +48,19 @@ export class AuthService {
   }
 
   initializeFromStorage(): void {
-    const accessToken = this.tokenService.getAccessToken();
-    if (!accessToken) {
+    if (!this.tokenService.hasStoredSession() || this.tokenService.isAccessTokenExpired()) {
       return;
     }
 
-    this.authStore.setAccessToken(accessToken);
-    void this.loadCurrentUser().catch(() => this.handleSessionExpired(false));
+    const accessToken = this.tokenService.getAccessToken();
+    if (accessToken) {
+      this.authStore.setAccessToken(accessToken);
+    }
+  }
+
+  hasValidSession(): boolean {
+    const accessToken = this.authStore.accessToken() ?? this.tokenService.getAccessToken();
+    return !!accessToken && !this.tokenService.isAccessTokenExpired();
   }
 
   async tryRestoreSession(): Promise<boolean> {
@@ -170,11 +177,16 @@ export class AuthService {
   }
 
   loadCurrentUser(): Promise<UserProfile> {
+    const generation = this.sessionGeneration;
     this.authStore.setLoading(true);
 
     return firstValueFrom(
       this.authApi.getCurrentUser().pipe(
-        tap((user) => this.authStore.setUser(user)),
+        tap((user) => {
+          if (generation === this.sessionGeneration) {
+            this.authStore.setUser(user);
+          }
+        }),
         finalize(() => this.authStore.setLoading(false)),
       ),
     );
@@ -212,6 +224,10 @@ export class AuthService {
   }
 
   handleSessionExpired(showMessage = true): void {
+    if (this.hasValidSession()) {
+      return;
+    }
+
     this.clearSession();
     if (showMessage) {
       this.notifications.error('Your session has expired. Please sign in again.');
@@ -220,11 +236,13 @@ export class AuthService {
   }
 
   clearSession(): void {
+    this.sessionGeneration++;
     this.tokenService.clearTokens();
     this.authStore.clear();
   }
 
   private applyAuthResponse(response: AuthResponse, rememberMe: boolean): void {
+    this.sessionGeneration++;
     this.tokenService.storeTokens(response, rememberMe);
     this.authStore.setSession(response.accessToken, response.user);
     this.logger.info('Authentication session updated', { userId: response.user.id });

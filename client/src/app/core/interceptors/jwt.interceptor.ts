@@ -30,7 +30,9 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
       return authService.refreshTokens().pipe(
         switchMap((response) => next(appendBearerToken(req, response.accessToken))),
         catchError((refreshError) => {
-          authService.handleSessionExpired();
+          if (!authService.hasValidSession()) {
+            authService.handleSessionExpired();
+          }
           return throwError(() => refreshError);
         }),
       );

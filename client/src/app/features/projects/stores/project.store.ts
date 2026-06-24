@@ -1,10 +1,13 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { catchError, finalize, of, tap } from 'rxjs';
+import { catchError, finalize, forkJoin, map, of, switchMap, tap } from 'rxjs';
 import { extractApiErrorMessage } from '@core/authentication/utils/api-error.util';
 import { AuthStore } from '@core/stores/auth.store';
+import { OrganizationService } from '@features/organizations/services/organization.service';
+import { OrganizationMemberRole } from '@features/organizations/models/organization.models';
 import { ProjectApiService } from '@features/projects/services/project-api.service';
 import { ProjectService } from '@features/projects/services/project.service';
-import { currentMemberRole } from '@features/projects/utils/project-permissions.util';
+import { currentMemberRole, hasSystemRole } from '@features/projects/utils/project-permissions.util';
+import { canCreateTaskInProject } from '@features/tasks/utils/task-permissions.util';
 import type {
   CreateProjectRequest,
   Project,
@@ -18,9 +21,12 @@ import { ProjectPriority, ProjectRole, ProjectStatus } from '@features/projects/
 export class ProjectStore {
   private readonly projectService = inject(ProjectService);
   private readonly projectApi = inject(ProjectApiService);
+  private readonly organizationService = inject(OrganizationService);
   private readonly authStore = inject(AuthStore);
 
   private readonly _items = signal<Project[]>([]);
+  private readonly _creatableProjects = signal<Project[]>([]);
+  private readonly _loadingCreatable = signal(false);
   private readonly _selected = signal<Project | null>(null);
   private readonly _members = signal<ProjectMember[]>([]);
   private readonly _loading = signal(false);
@@ -42,6 +48,8 @@ export class ProjectStore {
   private readonly _selectedOrganizationId = signal<string | null>(null);
 
   readonly items = this._items.asReadonly();
+  readonly creatableProjects = this._creatableProjects.asReadonly();
+  readonly loadingCreatable = this._loadingCreatable.asReadonly();
   readonly selected = this._selected.asReadonly();
   readonly members = this._members.asReadonly();
   readonly loading = this._loading.asReadonly();
@@ -118,6 +126,37 @@ export class ProjectStore {
           this._members.set([]);
           return of([]);
         }),
+      )
+      .subscribe();
+  }
+
+  loadCreatableProjects(): void {
+    this._loadingCreatable.set(true);
+    this._error.set(null);
+
+    const emptyFilters: ProjectFilters = {
+      organizationId: null,
+      status: null,
+      priority: null,
+      isArchived: false,
+      ownerId: null,
+    };
+
+    forkJoin({
+      projects: this.projectService.loadProjects(1, 100, '', emptyFilters, 'name', false),
+      adminOrgIds: this.resolveAdminOrganizationIds(),
+    })
+      .pipe(
+        switchMap(({ projects, adminOrgIds }) =>
+          this.filterCreatableProjects(projects.items, adminOrgIds),
+        ),
+        tap((projects) => this._creatableProjects.set(projects)),
+        catchError((error) => {
+          this._error.set(extractApiErrorMessage(error, 'Failed to load projects'));
+          this._creatableProjects.set([]);
+          return of([] as Project[]);
+        }),
+        finalize(() => this._loadingCreatable.set(false)),
       )
       .subscribe();
   }
@@ -279,5 +318,78 @@ export class ProjectStore {
 
   clearError(): void {
     this._error.set(null);
+  }
+
+  private resolveAdminOrganizationIds() {
+    const userId = this.authStore.user()?.id;
+    if (!userId) {
+      return of(new Set<string>());
+    }
+
+    return this.organizationService.list({ page: 1, pageSize: 100, isActive: true }).pipe(
+      switchMap((result) => {
+        if (result.items.length === 0) {
+          return of(new Set<string>());
+        }
+
+        return forkJoin(
+          result.items.map((organization) =>
+            this.organizationService.listMembers(organization.id).pipe(
+              map((members) => {
+                const member = members.find((entry) => entry.userId === userId);
+                if (
+                  member?.role === OrganizationMemberRole.Owner ||
+                  member?.role === OrganizationMemberRole.Administrator
+                ) {
+                  return organization.id;
+                }
+                return null;
+              }),
+              catchError(() => of(null)),
+            ),
+          ),
+        ).pipe(
+          map((organizationIds) =>
+            new Set(organizationIds.filter((id): id is string => id !== null)),
+          ),
+        );
+      }),
+    );
+  }
+
+  private filterCreatableProjects(projects: Project[], adminOrgIds: Set<string>) {
+    const userId = this.authStore.user()?.id;
+    if (!userId || projects.length === 0) {
+      return of([] as Project[]);
+    }
+
+    const systemRoles = this.authStore.roles();
+    if (hasSystemRole(systemRoles, 'SuperAdmin', 'Admin')) {
+      return of(projects);
+    }
+
+    const orgAdminProjects = projects.filter((project) => adminOrgIds.has(project.organizationId));
+    const needsRoleCheck = projects.filter((project) => !adminOrgIds.has(project.organizationId));
+
+    if (needsRoleCheck.length === 0) {
+      return of(orgAdminProjects);
+    }
+
+    return forkJoin(
+      needsRoleCheck.map((project) =>
+        this.projectApi.listMembers(project.id).pipe(
+          map((members) => {
+            const role = members.find((member) => member.userId === userId)?.role;
+            return canCreateTaskInProject(systemRoles, role) ? project : null;
+          }),
+          catchError(() => of(null)),
+        ),
+      ),
+    ).pipe(
+      map((checked) => [
+        ...orgAdminProjects,
+        ...checked.filter((project): project is Project => project !== null),
+      ]),
+    );
   }
 }

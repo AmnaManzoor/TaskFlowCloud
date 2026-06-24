@@ -133,6 +133,7 @@ export class TasksShellComponent implements OnInit {
 
   ngOnInit(): void {
     this.projectStore.loadList();
+    this.projectStore.loadCreatableProjects();
     this.userStore.loadList();
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -156,7 +157,7 @@ export class TasksShellComponent implements OnInit {
   }
 
   canCreate() {
-    return canCreateTask(this.authStore.roles());
+    return canCreateTask(this.authStore.roles(), this.projectStore.creatableProjects().length);
   }
 
   canManage() {
