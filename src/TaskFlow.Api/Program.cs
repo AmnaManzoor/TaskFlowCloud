@@ -14,8 +14,7 @@ if //(!builder.Environment.IsDevelopment() &&
         new DefaultAzureCredential());
     
 }
-Console.WriteLine("here is the JWT key");
-Console.WriteLine(builder.Configuration["Jwt:SecretKey"]);
+
 builder.ConfigureSerilog();
 
 builder.Services.AddApiServices(builder.Configuration);
