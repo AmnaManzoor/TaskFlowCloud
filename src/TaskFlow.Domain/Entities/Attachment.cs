@@ -18,7 +18,7 @@ public sealed class Attachment
 
     public long FileSize { get; private set; }
 
-    public string FilePath { get; private set; } = string.Empty;
+    public string BlobPath { get; private set; } = string.Empty;
 
     public string? ContentHash { get; private set; }
 
@@ -38,7 +38,7 @@ public sealed class Attachment
         string fileExtension,
         string contentType,
         long fileSize,
-        string filePath,
+        string blobPath,
         string? contentHash)
     {
         return new Attachment
@@ -50,7 +50,7 @@ public sealed class Attachment
             FileExtension = fileExtension,
             ContentType = contentType,
             FileSize = fileSize,
-            FilePath = filePath,
+            BlobPath = blobPath,
             ContentHash = contentHash,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -62,7 +62,7 @@ public sealed class Attachment
         string fileExtension,
         string contentType,
         long fileSize,
-        string filePath,
+        string blobPath,
         string? contentHash)
     {
         OriginalFileName = originalFileName;
@@ -70,7 +70,7 @@ public sealed class Attachment
         FileExtension = fileExtension;
         ContentType = contentType;
         FileSize = fileSize;
-        FilePath = filePath;
+        BlobPath = blobPath;
         ContentHash = contentHash;
     }
 }

@@ -1,4 +1,4 @@
-namespace TaskFlow.Domain.Entities;
+  namespace TaskFlow.Domain.Entities;
 
 public sealed class TaskAssignment
 {

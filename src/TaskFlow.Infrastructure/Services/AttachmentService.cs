@@ -1,10 +1,13 @@
+using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TaskFlow.Application.Common.Models;
 using TaskFlow.Application.DTOs.Collaboration;
-using TaskFlow.Application.Interfaces.Collaboration;
+using TaskFlow.Application.Features.Attachments;
+using TaskFlow.Application.Features.Attachments.Commands.UploadAttachment;
 using TaskFlow.Application.Interfaces.Audit;
+using TaskFlow.Application.Interfaces.Collaboration;
 using TaskFlow.Application.Interfaces.Organizations;
 using TaskFlow.Application.Interfaces.Storage;
 using TaskFlow.Domain.Entities;
@@ -15,6 +18,7 @@ namespace TaskFlow.Infrastructure.Services;
 
 public sealed class AttachmentService(
     ApplicationDbContext dbContext,
+    IMediator mediator,
     UserManager<ApplicationUser> userManager,
     IFileStorageService fileStorageService,
     ICollaborationAccessService accessService,
@@ -28,46 +32,37 @@ public sealed class AttachmentService(
         UploadAttachmentRequest request,
         CancellationToken cancellationToken = default)
     {
-        await accessService.EnsureCanUploadAttachmentsAsync(currentUserId, taskId, cancellationToken);
-        _ = await dbContext.Tasks.AsNoTracking().SingleOrDefaultAsync(task => task.Id == taskId, cancellationToken)
-            ?? throw new KeyNotFoundException("Task not found.");
-
-        var stored = await fileStorageService.SaveAsync(
-            taskId,
-            request.FileStream,
-            request.FileName,
-            request.ContentType,
+        var attachment = await mediator.Send(
+            new UploadAttachmentCommand(
+                currentUserId,
+                taskId,
+                request.FileStream,
+                request.FileName,
+                request.ContentType,
+                request.FileSize),
             cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(stored.ContentHash)
-            && await dbContext.Attachments.AnyAsync(
-                attachment => attachment.TaskId == taskId && attachment.ContentHash == stored.ContentHash,
-                cancellationToken))
-        {
-            await fileStorageService.DeleteAsync(stored.RelativePath, cancellationToken);
-            logger.LogWarning("Duplicate upload rejected for task {TaskId} by user {UserId}", taskId, currentUserId);
-            throw new InvalidOperationException("An identical file has already been uploaded to this task.");
-        }
-
-        var sanitizedOriginalName = Path.GetFileName(request.FileName);
-        var attachment = Attachment.Create(
+        await auditTriggers.LogAttachmentUploadedAsync(
+            attachment.Id,
             taskId,
             currentUserId,
-            sanitizedOriginalName,
-            stored.StoredFileName,
-            stored.FileExtension,
-            stored.ContentType,
-            stored.FileSize,
-            stored.RelativePath,
-            stored.ContentHash);
+            cancellationToken);
 
-        dbContext.Attachments.Add(attachment);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("File uploaded as attachment {AttachmentId} for task {TaskId} by user {UserId}", attachment.Id, taskId, currentUserId);
-        await auditTriggers.LogAttachmentUploadedAsync(attachment.Id, taskId, currentUserId, cancellationToken);
-
-        return await MapAttachmentAsync(attachment.Id, cancellationToken);
+        return MapToResponse(attachment);
     }
+
+    private static AttachmentResponse MapToResponse(AttachmentDto attachment) =>
+        new(
+            attachment.Id,
+            attachment.TaskId,
+            attachment.UploadedBy,
+            attachment.UploaderEmail,
+            attachment.OriginalFileName,
+            attachment.FileExtension,
+            attachment.ContentType,
+            attachment.FileSize,
+            attachment.DownloadUrl,
+            attachment.CreatedAt);
 
     public async Task<AttachmentResponse> ReplaceAsync(
         string currentUserId,
@@ -81,7 +76,7 @@ public sealed class AttachmentService(
             .SingleOrDefaultAsync(entry => entry.Id == attachmentId, cancellationToken)
             ?? throw new KeyNotFoundException("Attachment not found.");
 
-        var previousPath = attachment.FilePath;
+        var previousPath = attachment.BlobPath;
         var stored = await fileStorageService.SaveAsync(
             attachment.TaskId,
             request.FileStream,
@@ -134,7 +129,7 @@ public sealed class AttachmentService(
             .SingleOrDefaultAsync(entry => entry.Id == attachmentId, cancellationToken)
             ?? throw new KeyNotFoundException("Attachment not found.");
 
-        var stream = await fileStorageService.OpenReadAsync(attachment.FilePath, cancellationToken);
+        var stream = await fileStorageService.OpenReadAsync(attachment.BlobPath, cancellationToken);
         logger.LogInformation("Attachment {AttachmentId} downloaded by user {UserId}", attachmentId, currentUserId);
 
         return new AttachmentDownloadResult(stream, attachment.ContentType, attachment.OriginalFileName);
@@ -148,7 +143,7 @@ public sealed class AttachmentService(
             .SingleOrDefaultAsync(entry => entry.Id == attachmentId, cancellationToken)
             ?? throw new KeyNotFoundException("Attachment not found.");
 
-        var filePath = attachment.FilePath;
+        var filePath = attachment.BlobPath;
         dbContext.Attachments.Remove(attachment);
         await dbContext.SaveChangesAsync(cancellationToken);
         await fileStorageService.DeleteAsync(filePath, cancellationToken);

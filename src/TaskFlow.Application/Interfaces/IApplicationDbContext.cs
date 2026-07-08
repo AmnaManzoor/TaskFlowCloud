@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using TaskFlow.Domain.Entities;
+
 namespace TaskFlow.Application.Interfaces;
 
 /// <summary>
@@ -5,5 +8,9 @@ namespace TaskFlow.Application.Interfaces;
 /// </summary>
 public interface IApplicationDbContext
 {
+    DbSet<TaskItem> Tasks { get; }
+
+    DbSet<Attachment> Attachments { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

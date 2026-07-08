@@ -1,6 +1,9 @@
 using System.Security.Claims;
+using MediatR;
 using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.DTOs.Collaboration;
+using TaskFlow.Application.Features.Attachments.Commands.DeleteAttachment;
+using TaskFlow.Application.Features.Attachments.Queries.DownloadAttachment;
 using TaskFlow.Application.Interfaces.Collaboration;
 
 namespace TaskFlow.Api.Endpoints;
@@ -91,21 +94,25 @@ public static class AttachmentEndpoints
 
     private static async Task<IResult> DownloadAsync(
         Guid id,
-        IAttachmentService service,
+        ISender sender,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
-        var result = await service.DownloadAsync(GetUserId(user), id, cancellationToken);
+        var result = await sender.Send(
+            new DownloadAttachmentQuery(GetUserId(user), id),
+            cancellationToken);
         return Results.File(result.FileStream, result.ContentType, result.FileName);
     }
 
     private static async Task<IResult> DeleteAsync(
         Guid id,
-        IAttachmentService service,
+        ISender sender,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
-        await service.DeleteAsync(GetUserId(user), id, cancellationToken);
+        await sender.Send(
+            new DeleteAttachmentCommand(GetUserId(user), id),
+            cancellationToken);
         return Results.NoContent();
     }
 

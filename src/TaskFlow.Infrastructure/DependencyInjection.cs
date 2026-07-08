@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<SeedOptions>(configuration.GetSection(SeedOptions.SectionName));
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
+        services.Configure<AzureBlobStorageOptions>(configuration.GetSection(AzureBlobStorageOptions.SectionName));
 
         var databaseOptions = configuration
             .GetSection(DatabaseOptions.SectionName)
@@ -152,7 +153,20 @@ public static class DependencyInjection
         services.AddScoped<ICollaborationAccessService, CollaborationAccessService>();
         services.AddScoped<ICommentService, CommentService>();
         services.AddScoped<IAttachmentService, AttachmentService>();
-        services.AddScoped<IFileStorageService, LocalFileStorageService>();
+
+        var azureBlobStorageOptions = configuration
+            .GetSection(AzureBlobStorageOptions.SectionName)
+            .Get<AzureBlobStorageOptions>();
+
+        if (azureBlobStorageOptions?.IsConfigured == true)
+        {
+            services.AddScoped<IFileStorageService, AzureBlobStorageService>();
+        }
+        else
+        {
+            services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        }
+
         services.AddScoped<INotificationPublisher, NotificationPublisher>();
         services.AddScoped<INotificationTriggerService, NotificationTriggerService>();
         services.AddScoped<INotificationService, NotificationService>();

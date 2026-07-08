@@ -33,7 +33,7 @@ internal sealed class AttachmentConfiguration : IEntityTypeConfiguration<Attachm
             .HasMaxLength(200)
             .IsRequired();
 
-        builder.Property(attachment => attachment.FilePath)
+        builder.Property(attachment => attachment.BlobPath)
             .HasMaxLength(500)
             .IsRequired();
 
